@@ -1,0 +1,95 @@
+FROM nvidia/cuda:9.0-cudnn7-devel-ubuntu16.04
+
+USER root
+ENV NUM_CORES=8 \
+    TERM=xterm \
+    SHELL=/bin/bash \
+    JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64/jre \
+    JAVA_LIBS='-L/usr/lib/jvm/java-1.8.0-openjdk-amd64/jre/lib/amd64 -L/usr/lib/jvm/java-1.8.0-openjdk-amd64/jre/lib/amd64/server/ -L/usr/lib -ljvm -ldl' \
+    VER_BAZEL=0.5.4 \
+    VER_TINI=v0.16.1 \
+    VER_PROTOBUF=v3.4.1 \
+    CC=/usr/bin/gcc \
+    CXX=/usr/bin/g++ \
+    VER_PYTHON=python3 
+
+ENV PATH=${PATH}:${JAVA_HOME}/bin 
+
+# Tensorflow is looking for /usr/bin/env python, so we create softlink here
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends apt-utils && \
+    apt-get install -y  python3.5 git wget curl g++ gcc openjdk-8-jdk \
+                        unzip  autoconf automake libtool zlib1g-dev  \
+                        bash-completion python3-pip && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    ln -s /usr/bin/python3 /usr/bin/python
+
+RUN pip3 install --upgrade pip && \
+    pip3 install six numpy wheel 
+
+# Build c++ protobuf then build python version and install. 
+# That should be the fastest protobuf for python.
+RUN alias g++="g++ --std=c++0x" && \
+    cd /tmp && \
+    git clone https://github.com/google/protobuf.git && \
+    cd protobuf && \
+    git checkout ${VER_PROTOBUF} && \
+    ./autogen.sh && \
+    ./configure --prefix=/usr && \
+    make -j${NUM_CORES} && \
+    make check && \
+    make install && \
+    ldconfig # refresh shared library cache. && \
+    cd python && \
+    /usr/bin/python setup.py build --cpp_implementation
+
+RUN cd /tmp/protobuf/python && \
+    /usr/bin/python setup.py install 
+    #rm -rf /tmp/protobuf
+
+# Install Bazel needed to build Tensorflow
+RUN wget https://github.com/bazelbuild/bazel/releases/download/${VER_BAZEL}/bazel_${VER_BAZEL}-linux-x86_64.deb && \
+    dpkg -i bazel_${VER_BAZEL}-linux-x86_64.deb && \
+    rm bazel_${VER_BAZEL}-linux-x86_64.deb
+
+ADD https://github.com/krallin/tini/releases/download/${VER_TINI}/tini /tini 
+RUN chmod +x /tini     
+
+
+ENV PYTHON_BIN_PATH=/usr/bin/${VER_PYTHON} \
+    PYTHON_LIB_PATH=/usr/lib/${VER_PYTHON}/dist-packages \
+    CC_OPT_FLAGS=-march=native \
+    TF_NEED_JEMALLOC=1 \
+    TF_NEED_S3=0   \
+    TF_NEED_GDR=0  \
+    TF_NEED_GCP=0 \
+    TF_NEED_HDFS=0 \
+    TF_ENABLE_XLA=0 \
+    TF_NEED_VERBS=0 \
+    TF_NEED_OPENCL=0 \
+    TF_NEED_CUDA=1 \
+    TF_NEED_MKL=0 \
+    TF_DOWNLOAD_MKL=0 \
+    TF_NEED_MPI=0 \
+    TF_CUDA_CLANG=0 \
+    TF_CUDA_VERSION=9.0 \
+    CUDA_TOOLKIT_PATH=/usr/local/cuda \
+    GCC_HOST_COMPILER_PATH=/usr/bin/gcc \
+    TF_CUDNN_VERSION=7 \
+    TF_CUDA_COMPUTE_CAPABILITIES=6.1 \
+    CUDNN_INSTALL_PATH=/usr/local/cuda \
+    HOST_CXX_COMPILER=/usr/bin/g++ \
+    HOST_C_COMPILER=/usr/bin/gcc 
+
+RUN cd /tmp && \
+    git clone --recurse-submodules https://github.com/tensorflow/tensorflow && \
+    cd tensorflow && \
+    git checkout ${VER_TENSORFLOW}
+    
+RUN mkdir -p /opt/bin/
+ADD ./compile_tensorflow.sh /opt/bin/compile_tensorflow.sh
+RUN chmod 755 /opt/bin/compile_tensorflow.sh
+
+ENTRYPOINT ["/tini", "--"]
+CMD ["/opt/bin/compile_tensorflow.sh"]
