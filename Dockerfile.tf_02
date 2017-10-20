@@ -1,8 +1,10 @@
 FROM tf:01
+LABEL maintainer="mpekalski@gmail.com"
 
 USER root
 
 ENV NUM_CORES=8 \
+    VER_PYTHON=python3.5 \
     VER_PROTOBUF=v3.4.1 \
     VER_SPARK=2.2.0 \
     VER_JUPYTER_LAB=v0.27.0 \
@@ -37,10 +39,8 @@ RUN useradd -m -s /bin/bash -N -u $NB_UID $NB_USER && \
     mkdir -p $CONDA_DIR && \
     chown $NB_USER:$NB_GID $CONDA_DIR && \
     fix-permissions $HOME && \
-    echo 'LC_ALL=en_US.UTF-8\nLANG=en_US.UTF-8\nLANGUAGE=en_US.UTF-8' >> /etc/environment
-
-RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
-
+    echo 'LC_ALL=en_US.UTF-8\nLANG=en_US.UTF-8\nLANGUAGE=en_US.UTF-8' >> /etc/environment && \
+    echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
 
 RUN apt-get update && \
     apt-get install -y  locales && \
@@ -76,8 +76,8 @@ RUN apt-get update && \
             g++-multilib  libtifiles2-9   libpng++-dev libpng3    \
             zlib1g-dbg swig libjasper-runtime libpq-dev          \
             libgdal-dev libx264-dev libblas-dev liblapack-dev libgdcm2-dev \
-            g++-4.9 gcc-4.9 doxygen libpq5 libgtk-3-dev  gfortran libhdf5-serial-dev
-RUN apt-get -y install ocl-icd-libopencl1 clinfo && \
+            g++-4.9 gcc-4.9 doxygen libpq5 libgtk-3-dev  gfortran libhdf5-serial-dev \
+            ocl-icd-libopencl1 clinfo freeglut3-dev mesa-common-dev freeglut3-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -89,21 +89,23 @@ RUN echo "/usr/local/nvidia/lib" >> /etc/ld.so.conf.d/nvidia.conf && \
     echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf
 
 # Install Anaconda
-#RUN curl -O https:/ocl-icd-libopencl1/repo.continuum.io/archive/Anaconda3-5.0.0.1-Linux-x86_64.sh
-COPY Anaconda3-${VER_ANACONDA}-Linux-x86_64.sh /tmp/Anaconda3-${VER_ANACONDA}-Linux-x86_64.sh
-
+#COPY Anaconda3-${VER_ANACONDA}-Linux-x86_64.sh /tmp/Anaconda3-${VER_ANACONDA}-Linux-x86_64.sh
+# curl -O https://repo.continuum.io/archive/Anaconda3-${VER_ANACONDA}-Linux-x86_64.sh && \
 RUN cd /tmp && \
-    chmod 755 Anaconda3-${VER_ANACONDA}-Linux-x86_64.sh && \
-    ./Anaconda3-${VER_ANACONDA}-Linux-x86_64.sh -b -u -p $CONDA_DIR
+    curl -O https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
+    chmod 755 Miniconda3-latest-Linux-x86_64.sh && \
+    ./Miniconda3-latest-Linux-x86_64.sh -b -u -p $CONDA_DIR && \
+    rm Miniconda3-latest-Linux-x86_64.sh
 
 RUN conda install -y python=3.5.0 && \
-    conda install -y r-essentials numpy scipy ipykernel jupyter matplotlib conda-build notebook gcc && \
-    conda install -y -c conda-forge feather-format && \
-    pip install cython
+    conda install -y numpy scipy matplotlib conda-build notebook gcc plotly \
+                     pandas scipy scikit-learn nltk six wheel seaborn h5py && \
+    conda install -y -c intel mkl    && \
+    conda install -y -c conda-forge feather-format pandas-profiling ggplot && \
+    conda clean -tiy        
 
 # PILLOW SIMD
-RUN pip uninstall -y pillow && \
-    cd /tmp && \
+RUN cd /tmp && \
     git clone https://github.com/uploadcare/pillow-simd && \
     cd pillow-simd && \
     CC="cc -mavx2" pip install -U --force-reinstall pillow-simd && \
@@ -116,32 +118,31 @@ RUN cd /tmp && \
     jupyter nbextension install facets-dist/ --sys-prefix && \
     rm -rf /tmp/facets
 
-RUN update-java-alternatives -s java-1.8.0-openjdk-amd64 && \
-    R CMD javareconf JAVA_CPPFLAGS=-I/usr/lib/jvm/java/include/
+#RUN update-java-alternatives -s java-1.8.0-openjdk-amd64 && \
+#    R CMD javareconf JAVA_CPPFLAGS=-I/usr/lib/jvm/java/include/
 
 RUN rm ${CONDA_DIR}/lib/libstdc++.so.6 && \
     ln -s /usr/lib/x86_64-linux-gnu/libstdc++.so.6 ${CONDA_DIR}/lib/libstdc++.so.6 
 
-RUN npm install bower -g
+RUN npm install bower -g && \
+    npm cache clear
 
 RUN pip install git+https://github.com/jupyterhub/jupyterhub.git@${VER_JUPTER_HUB} && \
     pip install git+https://github.com/jupyter/notebook.git@${VER_JUPYTER_NOTEBOOK} && \ 
     pip install git+https://github.com/jupyterlab/jupyterlab.git@${VER_JUPYTER_LAB}
 
 # configurable-proxy for jupyterhub
+#https://github.com/npm/npm/issues/10983
 RUN cd /tmp && \
     git clone https://github.com/jupyterhub/configurable-http-proxy && \
     cd configurable-http-proxy  &&\
     git checkout ${VER_CONF_PROXY} && \
+    cd /tmp/configurable-http-proxy && \
     npm install -g && \
-    rm -rf /tmp/configurable-http-proxy/
+    rm -rf /tmp/configurable-http-proxy/ 
 
 # Keras
 RUN pip install git+https://github.com/fchollet/keras.git@${VER_KERAS}
-
-RUN apt-get update && apt-get -y install freeglut3-dev mesa-common-dev freeglut3-dev && \
-    ldconfig
-
 
 ENV JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64/jre \
     PATH=$PATH:$JAVA_HOME/bin \
@@ -161,12 +162,15 @@ RUN cd /tmp && \
     cd build && \
     cmake .. -DCMAKE_INSTALL_PREFIX=/opt/vtk  -DBUILD_SHARED_LIBS=ON && \
     make -j${NUM_CORES} && \
-    make install
+    make install && \
+    rm /tmp/vtk -rf
+
 
 # Install libTIFF so OpenCV does not complain about missing references and version number
 RUN cd /tmp && \
     wget http://old-releases.ubuntu.com/ubuntu/pool/universe/t/tiff3/libtiff4_3.9.7-2ubuntu1_amd64.deb && \
     dpkg -i libtiff4_3.9.7-2ubuntu1_amd64.deb  && \
+    rm libtiff4_3.9.7-2ubuntu1_amd64.deb && \
     ldconfig
 
 # LibLZMA 
@@ -181,21 +185,18 @@ RUN cd /tmp && \
     rm xz-5.2.2.tar.gz && \
     rm xz-5.2.2/ -rf    
 
+ENV OLD_PATH=${PATH} \
+    PATH=/usr/lib/x86_64-linux-gnu:/usr/lib/jvm/java-8-openjdk-amd64:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin 
+    
+
+#-DOPENCV_EXTRA_MODULES_PATH=/tmp/opencv_contrib/modules/ \
+#-DHAVE_GDCM=ON \
 RUN cd /tmp && \
     git clone https://github.com/opencv/opencv.git && \
     cd opencv && \
     git checkout master && \
-    git clone https://github.com/opencv/opencv_contrib.git    
-
-RUN ldconfig
-#ENV PATH=/usr/lib/x86_64-linux-gnu:/usr/lib/jvm/java-8-openjdk-amd64:/usr/lib/jvm/java-8-openjdk-amd64:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ENV OLD_PATH=${PATH}
-ENV PATH=/usr/lib/x86_64-linux-gnu:/usr/lib/jvm/java-8-openjdk-amd64:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-    VER_PYTHON=python3.5 
-#-DOPENCV_EXTRA_MODULES_PATH=/tmp/opencv_contrib/modules/ \
-#-DHAVE_GDCM=ON \
-
-RUN cd /tmp/opencv && \
+    git clone https://github.com/opencv/opencv_contrib.git && \
+    cd /tmp/opencv && \
     mkdir build && \
     cd build && \
     cmake .. \
@@ -260,7 +261,21 @@ RUN cd /tmp/opencv && \
     cd /tmp/opencv/build && \    
     make -j${NUM_CORES+1} && \
     cd /tmp/opencv/build && \
-    make install  
+    make install  && \
+    rm /tmp/opencv -rf && \
+    rm /tmp/opencv_contrib -rf
+
+ #xgboost
+RUN cd /usr/local/src && mkdir xgboost && cd xgboost && \
+    git clone --depth 1 --recursive https://github.com/dmlc/xgboost.git && cd xgboost && \
+    make && cd python-package && ${CONDA_DIR}/bin/${VER_PYTHON} setup.py install
+
+RUN cd /tmp && git clone --recursive https://github.com/caffe2/caffe2.git && cd caffe2 && \
+    make && cd build && sudo make install && \
+    ${CONDA_DIR}/bin/python3 -c 'from caffe2.python import core' 2>/dev/null && echo "Success" || echo "Failure"
+
+
+
 
 # Docker cannot run two CMD in one file, so if one wants to run multiple
 # processes it is required to use something like supervisor.
@@ -277,15 +292,50 @@ ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/a
 ENV PATH=${OLD_PATH}:/usr/local/cuda-9.0/targets/x86_64-linux/lib/stubs
 
 RUN cd /tmp/protobuf/python && \
-    ${CONDA_DIR}/bin/${VER_PYTHON} setup.py install 
-
-RUN cd /tmp/tensorflow_pkg/  && \
+    ${CONDA_DIR}/bin/${VER_PYTHON} setup.py install --cpp_implementation && \
+    cd /tmp/tensorflow_pkg/  && \
     ${CONDA_DIR}/bin/pip install *.whl 
 
-# Cleaning
-#RUN apt-get clean && \
-#    rm -rf /tmp/* && \
-#    conda clean -tipsy 
+ENV GFLAGS_INCLUDE_DIRS=/opt/gflags/include \
+    GFLAGS_LIBRARY=/opt/gflags/lib \
+    GLOG_INCLUDE_DIR=/opt/glog/include \
+    GLOG_LIBRARY=/opt/glog/lib
+
+# GFlags and GLog and GTest
+RUN cd /tmp && \
+    git clone https://github.com/gflags/gflags && \
+    cd gflags && mkdir build && cd build && \
+    cmake .. -DCMAKE_INSTALL_PREFIX=/opt/gflags -DBUILD_SHARED_LIBS=ON && \
+    make -j${NUM_CORES} && make install && \
+    cd /tmp && \
+    git clone https://github.com/google/glog.git && \
+    cd glog && mkdir build && cd build && \
+    cmake .. -DCMAKE_INSTALL_PREFIX=/opt/glog -DBUILD_SHARED_LIBS=ON && \
+    make -j${NUM_CORES} && make install && \
+    cd /tmp && \
+    git clone https://github.com/google/googletest.git && \
+    cd googletest && mkdir build && cd build && \
+    cmake .. -DCMAKE_INSTALL_PREFIX=/opt/googletest -DBUILD_SHARED_LIBS=ON && \
+    make -j${NUM_CORES} && make install && \ 
+    rm /tmp/* -rf && \
+    updatedb && ldconfig 
+    
+
+ENV PATH=/opt/boost/bin:${PATH} \
+    BOOST_ROOT=/opt/boost \
+    LD_LIBRARY_PATH=/opt/boost/lib:$LD_LIBRARY_PATH \
+    VER_BOOST=1.65.1 \
+    VER_BOOST_=1_65_1 \
+    CPATH=$CPLUS_INCLUDE_PATH:/usr/include/${VER_PYTHON}m
+
+RUN cd /tmp && \
+    curl -L -o boost.tar.gz --url https://dl.bintray.com/boostorg/release/${VER_BOOST}/source/boost_${VER_BOOST_}.tar.gz && \
+    tar -zxvf boost.tar.gz && cd boost_${VER_BOOST_} && \
+    ./bootstrap.sh --prefix=/opt/boost
+RUN cd /tmp/boost_${VER_BOOST_} && \  
+    ./b2 install -j9 --with-program_options address-model=64  link=static,shared threading=multi --with-python --with-system  \ 
+                     --with-thread --with-mpi --with-signals --with-regex --with-timer --with-iostreams --with-graph_parallel \
+                     --with-serialization 
 
 EXPOSE 6006 8000
 WORKDIR $HOME
@@ -307,6 +357,14 @@ COPY tensorboard.conf /etc/supervisor/conf.d/tensorboard.conf
 COPY jupyterhub.conf  /etc/supervisor/conf.d/jupyterhub.conf
 
 
+# Cleaning
+#
+RUN rm /tmp/* -rf && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    conda clean -tiy   && \
+    npm cache clean  && \
+    rm -rf /root/.cache/pip/* 
 # seems like OpenCV compiled without VTK
 # need to isntall Protobuf and Tensorflow for Anaconda's python
 #substitute cuda version for variable, in different folder names

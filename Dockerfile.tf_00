@@ -1,4 +1,5 @@
 FROM nvidia/cuda:9.0-cudnn7-devel-ubuntu16.04
+LABEL maintainer="mpekalski@gmail.com"
 
 USER root
 ENV NUM_CORES=8 \
@@ -42,11 +43,9 @@ RUN alias g++="g++ --std=c++0x" && \
     make install && \
     ldconfig # refresh shared library cache. && \
     cd python && \
-    /usr/bin/python setup.py build --cpp_implementation
-
-RUN cd /tmp/protobuf/python && \
+    /usr/bin/python setup.py build --cpp_implementation && \
     /usr/bin/python setup.py install 
-    #rm -rf /tmp/protobuf
+# we do not delete protobuf folder here, we will need it later
 
 # Install Bazel needed to build Tensorflow
 RUN wget https://github.com/bazelbuild/bazel/releases/download/${VER_BAZEL}/bazel_${VER_BAZEL}-linux-x86_64.deb && \
@@ -55,7 +54,6 @@ RUN wget https://github.com/bazelbuild/bazel/releases/download/${VER_BAZEL}/baze
 
 ADD https://github.com/krallin/tini/releases/download/${VER_TINI}/tini /tini 
 RUN chmod +x /tini     
-
 
 ENV PYTHON_BIN_PATH=/usr/bin/${VER_PYTHON} \
     PYTHON_LIB_PATH=/usr/lib/${VER_PYTHON}/dist-packages \
