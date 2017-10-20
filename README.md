@@ -7,15 +7,18 @@ This allowed me to move my whole ML environment to the docker. The aim here was 
 - Tensorflow
 - Keras
 - VTK
-- OpenCV
+- OpenCV (with GPU support and contrib modules)
 - Protobuf (C++ implementation for Python)
-- Pillow-SIMD
+- Pillow-SIMD (wheel)
 - JupyterHub
 - JupyterLab
 - JupyterNotebook
-- Facets
 - GLog
 - GFlags
+- GTest
+- Boost
+- OpenBLAS
+- XGBoost
 
 Probably in the future I will extend it with a couple more ML libraries, but as for now I mainly utilize Tensorflow. All versions of libraries can be set through environemnt variables (those should be located in the beginning of reach Dockerfile). 
 
@@ -51,6 +54,8 @@ nvidia-docker run -d --ipc=host -v /etc/passwd:/etc/passwd:ro -v /etc/shadow:/et
 ```
 maps `passwd` and `shadow` form the host machine to the container, so you could use your regular username and password. They are mapped as read-only, so although everything in the container is run as root the content of those cannot be altered. Also, the working dir has been set to the logged-in user's home folder, that has been mapped as writable. It also will be the default directory for jupyter notebook.
 
+Tensorboard by default will read model's data from `/models`, which can be mapped to a host folder (similiarily to passwd and shadow folders) or changed to a different direcotry, please see `start-tensorboard.sh`.
+
 It probably will take a couple of hours for everything to get build.
 # To do
 - change ENV to ARG, so versions of packages could be set by passing env variables to docker during the build
@@ -63,4 +68,10 @@ It probably will take a couple of hours for everything to get build.
 - add opencv_contrib to opencv (DOPENCV_EXTRA_MODULES_PATH)
 - add GDCM to opencv
 - remove pip3 install six numpy wheel from tf_00
-- add CAFFE 2.0
+- add CAFFE 2.0 (before OpenCV) when it starts supporting python 3
+- add PyTorch
+- check MKLROOT
+- PYLINT before OpenCV
+- Glog not found by OpenCV
+- add FFM
+- add snappy
