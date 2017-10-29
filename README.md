@@ -30,7 +30,7 @@ Probably in the future I will extend it with a couple more ML libraries, but as 
 ## Docker/nVidia-Docker
 [Docker-CE](https://docs.docker.com/engine/installation/linux/docker-ce/ubuntu/) - at the moment I am using Edge branch, as Docker 17.06 available in stable has a bug that does not remove some unnecessary files from /etc/lib/docker/diffs, which can grow quite fast. Also I have switched from Aufs to OverlayFS2. Change is very simple, please see [the docs](https://docs.docker.com/engine/userguide/storagedriver/overlayfs-driver/#configure-docker-with-the-overlay-or-overlay2-storage-driver"), but be aware that you will lose all containers and images when switching between filesystems. So it is better to do before starting any work. 
 
-Having the docker up and running, you may go to [nVidia-docker](https://github.com/NVIDIA/nvidia-docker) repository and install their wrapper, that will let you use GPU within a docker container. Although probably the easiest way is by adding repository to your system, see [nvidia.github.io/nvidia-docker](http://nvidia.github.io/nvidia-docker/).
+Having the docker up and running, you may go to [nVidia-docker2](https://github.com/NVIDIA/nvidia-docker/tree/2.0) repository and install their wrapper, that will let you use GPU within a docker container. Although probably the easiest way is by adding repository to your system, see [nvidia.github.io/nvidia-docker](http://nvidia.github.io/nvidia-docker/). Just make sure the latest docker-ce verstion you have is 17.09 as nvidia-docker2 does not support any newer (edge) releases.
     
 # How To
 To build the images simply run
