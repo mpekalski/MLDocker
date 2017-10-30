@@ -541,6 +541,14 @@ RUN useradd -m -s /bin/bash -N -u $NB_UID $NB_USER && \
     chown $NB_USER:$NB_GID /opt/bin -R && \
     fix-permissions /etc/jupyterhub/
 
+#1.enable jupyterlab extension
+#2. jupyterlab extension with jupyterhub
+RUN conda install -y -c conda-forge jupyter_nbextensions_configurator  \
+                                    ipywidgets                         \
+                                    jupyter_contrib_nbextensions       \
+                                    nbpresent                       && \
+    jupyter nbextension     enable --py widgetsnbextension  && \
+    jupyter serverextension enable --py jupyterlab 
 EXPOSE 6006 8000
 WORKDIR $HOME
 # Configure container startup
