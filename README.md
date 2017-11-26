@@ -1,4 +1,6 @@
 # Update
+## 2017-10-30
+Added notebook extensions.
 ## 2017-10-29
 Using the bazel hack from official Google's docker I managed to put TF compilation part into the main docker. I have also used docker staging build so now if something is compiled it is compiled in a container that is not being commited and only necessary files are being copied over (or installation files, like whl in case of opencv, tensorflow, protobuf). This way the final image got slimmed down from 18GB to 10GB.
 
@@ -24,7 +26,7 @@ This allowed me to move my whole ML environment to the docker. The aim here was 
 - OpenBLAS
 - XGBoost
 
-Probably in the future I will extend it with a couple more ML libraries, but as for now I mainly utilize Tensorflow. All versions of libraries can be set through environemnt variables (those should be located in the beginning of reach Dockerfile). 
+Probably in the future I will extend it with a couple more ML libraries, but as for now I mainly utilize Tensorflow. All versions of libraries can be set through environment variables (those should be located in the beginning of reach Dockerfile). 
 
 # Prerequisites
 ## Docker/nVidia-Docker
@@ -77,3 +79,4 @@ It probably will take a couple of hours for everything to get build.
 - Glog not found by OpenCV
 - add FFM
 - add snappy
+- add gitlab https://about.gitlab.com/installation/#ubuntu and a button in notebook to push notebook automatically to local git

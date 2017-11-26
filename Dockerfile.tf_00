@@ -166,7 +166,7 @@ ENV PYTHON_BIN_PATH=/usr/bin/${VER_PYTHON} \
     HOST_C_COMPILER=/usr/bin/gcc \
     LD_LIBRARY_PATH=/usr/local/cuda/extras/CUPTI/lib64:${LD_LIBRARY_PATH}
 
-ARG VER_TENSORFLOW=v1.4.0-rc1
+ARG VER_TENSORFLOW=v1.4.0
 #RUN echo "/usr/local/cuda-9.0/targets/x86_64-linux/lib/stubs/" >> /etc/ld.so.conf.d/nvidia_mp.conf && ldconfig 
 
 RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 && ldconfig && \
@@ -229,12 +229,12 @@ RUN cd /tmp && \
     rm -rf /tmp/configurable-http-proxy/ 
 
 ARG VER_JUPYTER_HUB=0.8.0 
-ARG VER_JUPYTER_NOTEBOOK=5.1.0
-ARG VER_JUPYTER_LAB=v0.27.0 
-ARG VER_KERAS=2.0.8 
+ARG VER_JUPYTER_NOTEBOOK=5.2.1
+ARG VER_JUPYTER_LAB=v0.29.2 
+ARG VER_KERAS=2.1.1
 # PILLOW SIMD
 RUN CC="cc -mavx2" pip install  --no-cache-dir -U --force-reinstall git+https://github.com/uploadcare/pillow-simd && \
-    pip install --no-cache-dir git+https://github.com/jupyterhub/jupyterhub.git@${VER_JUPTER_HUB} && \
+    pip install --no-cache-dir git+https://github.com/jupyterhub/jupyterhub.git@${VER_JUPYTER_HUB} && \
     pip install --no-cache-dir git+https://github.com/jupyter/notebook.git@${VER_JUPYTER_NOTEBOOK} && \ 
     pip install --no-cache-dir git+https://github.com/jupyterlab/jupyterlab.git@${VER_JUPYTER_LAB} && \
     pip install --no-cache-dir git+https://github.com/fchollet/keras.git@${VER_KERAS}
@@ -506,6 +506,8 @@ RUN cd /tmp && \
     rm -rf /tmp/magma-2.2.0.tar.gz && \
     rm -rf /tmp/builder
 
+
+
 #ARG PYTORCH_DIR=/opt/pytorch
 #ENV CMAKE_LIBRARY_PATH=${PYTORCH_DIR}/lib:${PYTORCH_DIR}/include:$CMAKE_LIBRARY_PATH \
 #    CMAKE_PREFIX_PATH=${PYTORCH_DIR} \
@@ -520,6 +522,26 @@ RUN cd /tmp && \
 FROM ml_12 AS ml_15
 #COPY --from=ml_13 /opt/pytorch/ /opt/pytorch/
 COPY --from=ml_13 /opt/magma-2.2.0/ /opt/magma-2.2.0/
+
+ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/lib/x86_64-linux-gnu
+ENV MAGMA_HOME=${MAGMA_DIR}
+
+# compile pytorch, torchvision and tensorboard-pytorch in one RUN
+# gcc has to be removed from conda as otherwise it hides the system 
+# one and build fails
+RUN conda uninstall -y gcc && \
+    cd /tmp && \
+    git clone --recursive https://github.com/pytorch/pytorch && \
+    cd pytorch && \
+    python setup.py install && \
+    cd .. && rm -rf pytorch && \
+    cd /tmp && \ 
+    git clone https://github.com/pytorch/vision && \
+    cd vision && \
+    sed -i "/pillow >= /d" ./setup.py && \
+    python setup.py install && \
+    cd .. && rm -rf vision && \
+    pip install git+https://github.com/lanpa/tensorboard-pytorch
 
 
 ARG VER_TINI=v0.16.1     

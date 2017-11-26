@@ -35,4 +35,4 @@ if [ ! -z "$JPY_HUB_API_URL" ]; then
   NOTEBOOK_ARGS="--hub-api-url=$JPY_HUB_API_URL $NOTEBOOK_ARGS"
 fi
 
-. /opt/bin/start.sh jupyterhub-singleuser $NOTEBOOK_ARGS $@
+. /opt/bin/start.sh jupyterhub-singleuser --NotebookApp.iopub_data_rate_limit=10000000 $NOTEBOOK_ARGS $@
