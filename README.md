@@ -1,6 +1,6 @@
 # Update
 ## 2017-11-26
-Added pytorch, pytorch visual, and tensorboard for pytorch. Bumped some packages versions. Removed gcc from anaconda.
+Added pytorch, pytorch visual, and tensorboard for pytorch. Bumped some packages versions. Removed gcc from anaconda. Unfortunately that bumped image size to 12.8GB.
 ## 2017-10-30
 Added notebook extensions.
 ## 2017-10-29
