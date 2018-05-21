@@ -1,4 +1,19 @@
 # Update
+## 2018-05-21
+added:
+  - apt-transport-https
+  - visual studio code 
+  - upgarde pip to 9.0.1
+  - python 3.6.2
+  - miniconda 4.4.10
+  - Tensorflow 1.8.0 (only for compute 6.1)
+  - JupyterHub still master
+  - JupyterNotebook 5.4.1
+  - JupyterLab 0.32.1
+  - Keras 2.1.6
+  - OpenCV 4.0 (do not compile examples)
+  - Boost 1.67
+
 ## 2017-11-26
 Added pytorch, pytorch visual, and tensorboard for pytorch. Bumped some packages versions. Removed gcc from anaconda. Unfortunately that bumped image size to 12.8GB.
 ## 2017-10-30
