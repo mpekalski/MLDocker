@@ -1,6 +1,5 @@
 # Update
 ## 2018-05-21
-added:
   - apt-transport-https
   - visual studio code 
   - upgarde pip to 9.0.1
