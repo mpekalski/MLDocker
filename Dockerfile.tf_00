@@ -53,7 +53,7 @@ RUN apt-get update && \
                         libopenblas-base gfortran pandoc emacs supervisor    \
                         bash-completion locate nodejs nodejs-legacy npm      \
                         openmpi-bin openmpi-doc libhiredis-dev libeigen3-dev \
-                        rsync && \
+                        rsync apt-transport-https ca-certificates && \
     #apt-get -y remove ffmpeg x264 libx264-dev && \
     #Prerequisites for OpenCV.
     # we have to install pip and numpy for python2 otherwisse cmake does not find neither python 2 nor 3
@@ -81,9 +81,19 @@ RUN apt-get update && \
             ocl-icd-libopencl1 clinfo freeglut3-dev mesa-common-dev freeglut3-dev \
             python-pip libpython2.7 python2.7-dev && \                        
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/*    
+    rm -rf /var/lib/apt/list
 
-RUN pip3 install --no-cache-dir --upgrade pip setuptools && \
+
+# Visual Studio Code
+RUN curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg && \
+    mv microsoft.gpg /etc/apt/trusted.gpg.d/microsoft.gpg && \
+    sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main" > /etc/apt/sources.list.d/vscode.list'  && \
+    apt-get update  && \
+    apt-get install -y --no-install-recommends libxss1 code  && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* 
+
+RUN pip3 install --no-cache-dir --upgrade pip==9.0.1 setuptools && \
     pip3 install --no-cache-dir six numpy wheel          && \
     /usr/bin/pip --no-cache-dir install numpy  
 
@@ -93,6 +103,33 @@ RUN mkdir -p /etc/OpenCL/vendors                                     && \
     echo "/usr/local/nvidia/lib"   >> /etc/ld.so.conf.d/nvidia.conf  && \
     echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf
 
+
+
+# Install Miniconda
+# curl -O https://repo.continuum.io/archive/Anaconda3-${VER_ANACONDA}-Linux-x86_64.sh && \
+# I install notebook here to get all dependencies, and later will upgrade from github
+ARG VER_MINICONDA=4.4.10
+RUN cd /tmp && \
+    curl -O https://repo.continuum.io/miniconda/Miniconda3-${VER_MINICONDA}-Linux-x86_64.sh && \
+    chmod 755 Miniconda3-${VER_MINICONDA}-Linux-x86_64.sh                                   && \
+    ./Miniconda3-${VER_MINICONDA}-Linux-x86_64.sh -b -u -p ${CONDA_DIR}                     && \
+    rm Miniconda3-${VER_MINICONDA}-Linux-x86_64.sh && \
+    conda install -y python=3.6.4 && \
+    conda install -y -c conda-forge feather-format pandas-profiling icu=56 && \
+    conda install -y numpy scipy matplotlib conda-build notebook gcc plotly   \
+                     pandas scipy scikit-learn nltk six wheel seaborn h5py    \
+                     libgcc pyyaml setuptools cffi                         && \                         
+    conda clean -tiy   && \
+    rm /usr/bin/python3 && ln -s /opt/conda/bin/python3 /usr/bin/python3
+
+
+
+RUN rm ${CONDA_DIR}/lib/libstdc++.so.6 && \
+    ln -s /usr/lib/x86_64-linux-gnu/libstdc++.so.6 ${CONDA_DIR}/lib/libstdc++.so.6 
+
+RUN npm install bower -g && \
+    npm cache clear      && \
+    bower cache clean --allow-root
 
 FROM ml_01 AS ml_02
 # Build c++ protobuf then build python version and install. 
@@ -134,8 +171,25 @@ RUN echo "startup --batch" >>/etc/bazel.bazelrc
 RUN echo "build --spawn_strategy=standalone --genrule_strategy=standalone" \
     >> /etc/bazel.bazelrc
 
+
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        cuda-command-line-tools-9-0 \
+        cuda-cublas-dev-9-0         \
+        cuda-cudart-dev-9-0         \
+        cuda-cufft-dev-9-0          \
+        cuda-curand-dev-9-0         \
+        cuda-cusolver-dev-9-0       \
+        cuda-cusparse-dev-9-0    && \
+    apt-get clean                && \
+    rm -rf /var/lib/apt/list     && \
+    find /usr/local/cuda-9.0/lib64/ -type f -name 'lib*_static.a' -not -name 'libcudart_static.a' -delete && \ 
+    rm /usr/lib/x86_64-linux-gnu/libcudnn_static_v7.a
+    
+
 # Install Bazel needed to build Tensorflow
-ARG VER_BAZEL=0.9.0
+ARG VER_BAZEL=0.11.0
 RUN wget https://github.com/bazelbuild/bazel/releases/download/${VER_BAZEL}/bazel_${VER_BAZEL}-linux-x86_64.deb && \
     dpkg -i bazel_${VER_BAZEL}-linux-x86_64.deb && \
     rm bazel_${VER_BAZEL}-linux-x86_64.deb
@@ -145,41 +199,49 @@ ENV PYTHON_BIN_PATH=/usr/bin/${VER_PYTHON} \
     PYTHON_LIB_PATH=/usr/lib/${VER_PYTHON}/dist-packages \
     CC_OPT_FLAGS=-march=native \
     TF_NEED_JEMALLOC=1 \
-    TF_NEED_S3=0   \
-    TF_NEED_GDR=0  \
-    TF_NEED_GCP=0 \
-    TF_NEED_HDFS=0 \
-    TF_ENABLE_XLA=0 \
-    TF_NEED_VERBS=0 \
-    TF_NEED_OPENCL=0 \
-    TF_NEED_CUDA=1 \
-    TF_NEED_MKL=0 \
-    TF_DOWNLOAD_MKL=0 \
-    TF_NEED_MPI=0 \
-    TF_CUDA_CLANG=0 \
-    TF_CUDA_VERSION=9.0 \
+    TF_NEED_S3=0       \
+    TF_NEED_GDR=0      \
+    TF_NEED_GCP=0      \
+    TF_NEED_HDFS=0     \
+    TF_ENABLE_XLA=1    \
+    TF_NEED_VERBS=0    \
+    TF_NEED_OPENCL=0   \
+    TF_NEED_CUDA=1     \
+    TF_NEED_MKL=0      \
+    TF_DOWNLOAD_MKL=0  \
+    TF_NEED_MPI=0      \
+    TF_CUDA_CLANG=0       \
+    TF_CUDA_VERSION=9.0   \
     TF_NEED_OPENCL_SYCL=0 \
-    TF_NEED_COMPUTECPP=0 \
+    TF_NEED_COMPUTECPP=0  \
     TF_SET_ANDROID_WORKSPACE=0 \
+    TF_NEED_TENSORRT=0 \
+    TF_NEED_KAFKA=1    \
     CUDA_TOOLKIT_PATH=/usr/local/cuda \
     GCC_HOST_COMPILER_PATH=/usr/bin/gcc \
     TF_CUDNN_VERSION=7 \
-    TF_CUDA_COMPUTE_CAPABILITIES=6.0,6.1,7.0 \
+    TF_CUDA_COMPUTE_CAPABILITIES=6.1 \
     HOST_CXX_COMPILER=/usr/bin/g++ \
     HOST_C_COMPILER=/usr/bin/gcc \
+    CI_BUILD_PYTHON=python3 \
     LD_LIBRARY_PATH=/usr/local/cuda/extras/CUPTI/lib64:${LD_LIBRARY_PATH}
 
-ARG VER_TENSORFLOW=v1.5.0-rc1
+ARG VER_TENSORFLOW=v1.8.0
 #RUN echo "/usr/local/cuda-9.0/targets/x86_64-linux/lib/stubs/" >> /etc/ld.so.conf.d/nvidia_mp.conf && ldconfig 
 
-RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 && ldconfig && \
-    cd /tmp && \
-    git clone --recurse-submodules https://github.com/tensorflow/tensorflow && \
+RUN cd /tmp && \
+    git clone --branch=${VER_TENSORFLOW} --depth=1 https://github.com/tensorflow/tensorflow && \
     cd tensorflow && \    
     git checkout ${VER_TENSORFLOW} && \
     cd /tmp/tensorflow && \    
-    /usr/bin/${VER_PYTHON} configure.py  && \
+    ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 && ldconfig
+
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs:${LD_LIBRARY_PATH}
+
+RUN cd /tmp/tensorflow && \
+    /usr/bin/${VER_PYTHON} configure.py                         && \            
     LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs:${LD_LIBRARY_PATH} \
+    tensorflow/tools/ci_build/builds/configured GPU \
     bazel build -c opt \
                 --config=cuda \
                 --copt=-march=native \
@@ -188,37 +250,17 @@ RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/lib
                 --verbose_failures \
                 --cxxopt="-D_GLIBCXX_USE_CXX11_ABI=0" \
                 --jobs=${NUM_CORES} \
-                //tensorflow/tools/pip_package:build_pip_package  && \
+                --config=mkl \
+                --action_env="LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" \
+                tensorflow/tools/pip_package:build_pip_package && \
+    rm /usr/local/cuda/lib64/stubs/libcuda.so.1
+
+RUN cd /tmp/tensorflow && \
     bazel-bin/tensorflow/tools/pip_package/build_pip_package /pip_pkg && \
     rm -rf /tmp/tensorflow   
 
 FROM ml_01 AS ml_04
 COPY --from=ml_03 /pip_pkg/* /pip_pkg/
-
-# Install Miniconda
-# curl -O https://repo.continuum.io/archive/Anaconda3-${VER_ANACONDA}-Linux-x86_64.sh && \
-# I install notebook here to get all dependencies, and later will upgrade from github
-ARG VER_MINICONDA=4.3.30
-RUN cd /tmp && \
-    curl -O https://repo.continuum.io/miniconda/Miniconda3-${VER_MINICONDA}-Linux-x86_64.sh && \
-    chmod 755 Miniconda3-${VER_MINICONDA}-Linux-x86_64.sh                                   && \
-    ./Miniconda3-${VER_MINICONDA}-Linux-x86_64.sh -b -u -p ${CONDA_DIR}                     && \
-    rm Miniconda3-${VER_MINICONDA}-Linux-x86_64.sh && \
-    conda install -y python=3.5.0 && \
-    conda install -y -c conda-forge feather-format pandas-profiling icu=56 && \
-    conda install -y numpy scipy matplotlib conda-build notebook gcc plotly   \
-                     pandas scipy scikit-learn nltk six wheel seaborn h5py    \
-                     libgcc pyyaml setuptools cffi                         && \                         
-    conda clean -tiy   
-
-
-
-RUN rm ${CONDA_DIR}/lib/libstdc++.so.6 && \
-    ln -s /usr/lib/x86_64-linux-gnu/libstdc++.so.6 ${CONDA_DIR}/lib/libstdc++.so.6 
-
-RUN npm install bower -g && \
-    npm cache clear      && \
-    bower cache clean --allow-root
 
 # configurable-proxy for jupyterhub
 #https://github.com/npm/npm/issues/10983
@@ -231,13 +273,25 @@ RUN cd /tmp && \
     npm install -g && \
     rm -rf /tmp/configurable-http-proxy/ 
 
-ARG VER_JUPYTER_HUB=0.8.0 
-ARG VER_JUPYTER_NOTEBOOK=5.2.1
-ARG VER_JUPYTER_LAB=v0.29.2 
-ARG VER_KERAS=2.1.1
+ARG VER_JUPYTER_HUB=master
+ARG VER_JUPYTER_NOTEBOOK=5.4.1
+ARG VER_JUPYTER_LAB=v0.32.1
+ARG VER_KERAS=2.1.6
 # PILLOW SIMD
-RUN CC="cc -mavx2" pip install  --no-cache-dir -U --force-reinstall git+https://github.com/uploadcare/pillow-simd && \
-    pip install --no-cache-dir git+https://github.com/jupyterhub/jupyterhub.git@${VER_JUPYTER_HUB} && \
+# there were circular redirects in async_generator, manual installation helped
+RUN pip install async_generator 
+
+RUN CC="cc -mavx2" pip install --no-cache-dir -U --force-reinstall git+https://github.com/uploadcare/pillow-simd
+    
+RUN cd /tmp && \
+    apt-get remove -y nodejs && \
+    wget https://nodejs.org/dist/v9.11.1/node-v9.11.1-linux-x64.tar.xz && \
+    tar -C /usr/local --strip-components 1 -xJf node-v9.11.1-linux-x64.tar.xz && \
+    wget https://raw.githubusercontent.com/jupyterhub/jupyterhub/master/requirements.txt && \
+    conda install --yes alembic && \
+    ${CONDA_DIR}/bin/pip install --no-cache-dir async_generator traitlets tornado jinja2 pamela python-oauth2 python-dateutil SQLAlchemy requests prometheus_client
+
+RUN pip install --no-cache-dir git+https://github.com/jupyterhub/jupyterhub.git@${VER_JUPYTER_HUB} && \
     pip install --no-cache-dir git+https://github.com/jupyter/notebook.git@${VER_JUPYTER_NOTEBOOK} && \ 
     pip install --no-cache-dir git+https://github.com/jupyterlab/jupyterlab.git@${VER_JUPYTER_LAB} && \
     pip install --no-cache-dir git+https://github.com/fchollet/keras.git@${VER_KERAS}
@@ -326,9 +380,10 @@ ENV OLD_PATH=${PATH} \
     LD_LIBRARY_PATH=${JAVA_HOME}/lib/amd64/server/:/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/amd64/server:/opt/boost/lib:/usr/local/cuda/lib64/:${CONDA_DIR}/lib/R/lib/:/usr/local/nvidia/lib64/:/usr/local/nvidia/lib:/lib/x86_64-linux-gnu:/usr/local/cuda/extras/CUPTI/lib64 
 #https://github.com/opencv/opencv/issues/7933
 ARG VER_OPENCV=master
-ARG VER_PYTHON_DET=python3.5
+ARG VER_PYTHON_DET=python3.6
 ARG OPENCV_DIR=/opt/opencv
-RUN cd /tmp && \
+RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 && ldconfig && \
+    cd /tmp && \
     git clone https://github.com/opencv/opencv.git && \
     cd opencv && \
     git checkout ${VER_OPENCV} && \
@@ -379,7 +434,7 @@ RUN cd /tmp && \
     -DBUILD_EXAMPLES=ON \
     -DBUILD_NEW_PYTHON_SUPPORT=ON \
     -DWITH_V4L=ON \
-    -DINSTALL_C_EXAMPLES=ON \
+    -DINSTALL_C_EXAMPLES=OFF \
     -DINSTALL_PYTHON_EXAMPLES=ON \
     -DBUILD_EXAMPLES=ON \
     -DWITH_OPENNI=OFF \
@@ -391,10 +446,10 @@ RUN cd /tmp && \
     -DENABLE_FAST_MATH=1 \
     -DCUDA_FAST_MATH=1 \
     -DCUDA_NVCC_FLAGS="-D_FORCE_INLINES" \
-    -DINSTALL_C_EXAMPLES=ON         \
-    -DBUILD_EXAMPLES=ON             \
-    -DINSTALL_PYTHON_EXAMPLES=ON    \
-    -DBUILD_TESTS=ON                \
+    -DINSTALL_C_EXAMPLES=OFF         \
+    -DBUILD_EXAMPLES=OFF             \
+    -DINSTALL_PYTHON_EXAMPLES=OFF    \
+    -DBUILD_TESTS=OFF                \
     -DWITH_TIFF=ON                  \
     -DBUILD_TIFF=OFF                \
     -DVTK_DIR=${VTK_DIR}/build                \
@@ -403,18 +458,32 @@ RUN cd /tmp && \
     make -j${NUM_CORES+1} && \
     cd /tmp/opencv/build && \
     make install  && \
-    ldconfig && rm -rf /tmp/opencv && \
+    rm /usr/local/cuda/lib64/stubs/libcuda.so.1 && \
+    #ldconfig && rm -rf /tmp/opencv && \
     mkdir -p /tmp/wheel/cv2 
 
-RUN cd /tmp/wheel && \
-    wget https://raw.githubusercontent.com/skvark/opencv-python/master/setup.py && \
-    wget https://raw.githubusercontent.com/skvark/opencv-python/master/README.rst && \
+    #cd /tmp/wheel && \
+
+
+RUN pip3 install --no-cache-dir   scikit-build && \
+    cd /tmp/opencv && \
+    #wget https://raw.githubusercontent.com/skvark/opencv-python/master/setup.py && \
+    wget https://raw.githubusercontent.com/mpekalski/opencv-python/2d0bad83e4484c00d791b392fc58224239b9ed8e/setup.py && \
+    #sed -i 's/pip._internal.vcs/pip.vcs/g' setup.py && \
     wget https://raw.githubusercontent.com/skvark/opencv-python/master/LICENSE.txt && \
+    touch README.rst && \
     wget https://raw.githubusercontent.com/skvark/opencv-python/master/LICENSE-3RD-PARTY.txt && \
-    cd /tmp/wheel/cv2 && wget https://raw.githubusercontent.com/skvark/opencv-python/master/cv2/__init__.py && cd /tmp && \
-    python -c "f= open('/tmp/wheel/cv_version.py','w');f.write('opencv_version = \"3.3.0\"');f.close()" && \
+    wget https://raw.githubusercontent.com/skvark/opencv-python/master/find_version.py && \
+    sed -i 's/version_file_path = "opencv\/m/version_file_path = "m/g' find_version.py && \
+    python3 find_version.py && \
+    #cd /tmp/wheel/cv2 && 
+    wget https://raw.githubusercontent.com/skvark/opencv-python/master/cv2/__init__.py && \
+        # && cd /tmp && \
+    #python -c "f= open('/tmp/wheel/cv_version.py','w');f.write('opencv_version = \"3.4.1\"');f.close()" && \
     echo 'Copying *.so for Py3' && \
-    cp /opt/opencv/lib/python3.5/site-packages/*.so /tmp/wheel/cv2/ && cd /tmp/wheel && \
+    cp /opt/opencv/lib/python3.6/site-packages/*.so /tmp/opencv && \
+    #/tmp/wheel/cv2/ && cd /tmp/wheel && \
+    #cp /tmp/opencv/cv_version.py /tmp/wheel/cv2 && \
     echo 'Build wheel'  && \
     pip wheel . -w /pip_pkg && \
     rm -rf /tmp/opencv && \
@@ -443,10 +512,10 @@ RUN cd /pip_pkg  && ls && \
 FROM ml_10 AS ml_11
 
 # Boost
-ARG VER_PYTHON_DET=python3.5
-ENV CPLUS_INCLUDE_PATH=/usr/include/${VER_PYTHON_DET}m
-ARG VER_BOOST=1.65.1
-ARG VER_BOOST_=1_65_1
+ARG VER_PYTHON_DET=python3.6
+ENV CPLUS_INCLUDE_PATH=/opt/conda/include/${VER_PYTHON_DET}m
+ARG VER_BOOST=1.67.0
+ARG VER_BOOST_=1_67_0
 ARG BOOST_DIR=/opt/boost
 ENV BOOST_ROOT=${BOOST_DIR}
 RUN cd /tmp && \
@@ -493,12 +562,13 @@ FROM ml_12 AS ml_13
 #--     LAPACK_LIBRARIES:
 ARG MAGMA_DIR=/opt/magma-2.2.0
 RUN cd /tmp && \
-    git clone https://github.com/pytorch/builder.git && \
+    wget https://raw.githubusercontent.com/pytorch/builder/07f55772c7934e43552aaa874f467bc2709440b9/conda/magma-cuda90-2.2.0/cmakelists.patch && \
+    wget https://raw.githubusercontent.com/pytorch/builder/07f55772c7934e43552aaa874f467bc2709440b9/conda/magma-cuda90-2.2.0/thread_queue.patch && \
     wget http://icl.cs.utk.edu/projectsfiles/magma/downloads/magma-2.2.0.tar.gz && \
     tar zxvf magma-2.2.0.tar.gz && \        
     cd magma-2.2.0 && \
-    patch CMakeLists.txt < /tmp/builder/conda/magma-cuda90-2.2.0/cmakelists.patch && \
-    patch control/thread_queue.cpp < /tmp/builder/conda/magma-cuda90-2.2.0/thread_queue.patch && \
+    patch CMakeLists.txt < ../cmakelists.patch && \    
+    patch control/thread_queue.cpp < ../thread_queue.patch && \
     mkdir build && cd build && \
     cmake .. \
     -DUSE_FORTRAN=OFF \
@@ -533,7 +603,8 @@ ENV MAGMA_HOME=${MAGMA_DIR}
 # compile pytorch, torchvision and tensorboard-pytorch in one RUN
 # gcc has to be removed from conda as otherwise it hides the system 
 # one and build fails
-RUN conda uninstall -y gcc && \
+RUN conda install -y mkl-include && \
+    conda uninstall -y gcc && \
     cd /tmp && \
     git clone --recursive https://github.com/pytorch/pytorch && \
     cd pytorch && \
@@ -585,7 +656,20 @@ RUN conda install -y -c conda-forge icu=56 && \
                                     jupyter_contrib_nbextensions       \
                                     nbpresent                       && \
     jupyter nbextension     enable --py widgetsnbextension  && \
-    jupyter serverextension enable --py jupyterlab 
+    jupyter serverextension enable --py jupyterlab && \
+    pip install pylint numba kafka-python
+
+
+# install vscode 
+RUN curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg                                        && \
+    mv microsoft.gpg /etc/apt/trusted.gpg.d/microsoft.gpg                                                                         && \
+    sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main" > /etc/apt/sources.list.d/vscode.list' && \
+    apt-get update          && \
+    apt-get install -y code && \
+    apt-get clean           && \
+    rm -rf /var/lib/apt/list
+
+
 EXPOSE 6006 8000
 WORKDIR $HOME
 # Configure container startup
@@ -607,7 +691,7 @@ COPY jupyterhub.conf  /etc/supervisor/conf.d/jupyterhub.conf
 
 ENV CONDA_DIR=${CONDA_DIR}
 ENV PATH=${PATH}
-ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
+ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/opt/opencv/lib
 # Cleaning
 #
 RUN apt-get purge -y --auto-remove && \
@@ -615,11 +699,12 @@ RUN apt-get purge -y --auto-remove && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
     conda clean -tiy   && \
-    npm cache clean  && \
+    npm cache clean --force  && \
     rm -rf /root/.cache  && \
     bower cache clean --allow-root && \
     rm -rf /pip_pkg && \
-    rm -rf /root/.cache
+    rm -rf /root/.cache && \
+    ldconfig
 # seems like OpenCV compiled without VTK
-# need to isntall Protobuf and Tensorflow for Anaconda's python
-#substitute cuda version for variable, in different folder names
+# need to install Protobuf and Tensorflow for Anaconda's python
+# substitute cuda version for variable, in different folder names
